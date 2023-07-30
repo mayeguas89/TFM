@@ -16,3 +16,6 @@
 [submodule "externals/glad"]
 	path = externals/glad
 	url = https://github.com/Dav1dde/glad
+[submodule "externals/argparse"]
+	path = externals/argparse
+	url = https://github.com/p-ranav/argparse.git
