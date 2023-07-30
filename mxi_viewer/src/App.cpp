@@ -19,7 +19,10 @@ static void GlfwErrorCallback(int error, const char* description)
 }
 }
 
-App::App(): clearColor_{ImVec4{0.45f, 0.55f, 0.60f, 1.00f}} {}
+App::App(const std::string& programName):
+  clearColor_{ImVec4{0.45f, 0.55f, 0.60f, 1.00f}},
+  programName_{programName}
+{}
 
 void App::Init()
 {
@@ -33,7 +36,7 @@ void App::Init()
   glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
 
   // Create window with graphics context
-  window_ = glfwCreateWindow(1280, 720, "Mxi Viewer", nullptr, nullptr);
+  window_ = glfwCreateWindow(1280, 720, programName_.c_str(), nullptr, nullptr);
   if (window_ == nullptr)
     throw std::runtime_error("Error creating window");
 

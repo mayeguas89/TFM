@@ -12,6 +12,7 @@ target_include_directories(MxiViewer PRIVATE
 )
 target_link_libraries(MxiViewer 
  PRIVATE
+ argparse::argparse
  glad
  glfw
  Imgui
