@@ -38,3 +38,5 @@ add_custom_command(
   COMMAND ${CMAKE_COMMAND}
   ARGS -E copy_directory ${CMAKE_SOURCE_DIR}/data ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/data
 )
+add_executable(ReaderUnitTest test/src/MxiReader.cpp)
+target_link_libraries(ReaderUnitTest PRIVATE gtest_main)
