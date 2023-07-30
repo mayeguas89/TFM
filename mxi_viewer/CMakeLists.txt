@@ -24,3 +24,6 @@ target_link_directories(MxiViewer
   PRIVATE
   ${MAXWELL_LIB_DIR}
 )
+
+add_executable(ReaderUnitTest test/src/MxiReader.cpp)
+target_link_libraries(ReaderUnitTest PRIVATE gtest_main)
