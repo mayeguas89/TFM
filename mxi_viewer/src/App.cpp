@@ -1,5 +1,7 @@
 #include "App.h"
 
+#include "MxiReader.h"
+
 // clang-format off
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
@@ -17,11 +19,28 @@ static void GlfwErrorCallback(int error, const char* description)
 {
   spdlog::error("GLFW Error {}: {}", error, description);
 }
+
+// Simple helper function to load an image into a OpenGL texture with common settings
+void CreateOpenGLTexture(uint8_t* data, int width, int height, int components, unsigned int& out_texture)
+{
+  // Create a OpenGL texture identifier
+  glGenTextures(1, &out_texture);
+  glBindTexture(GL_TEXTURE_2D, out_texture);
+
+  // Setup filtering parameters for display
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+}
 }
 
-App::App(const std::string& programName):
+App::App(MxiReader& reader, const std::string& programName):
   clearColor_{ImVec4{0.45f, 0.55f, 0.60f, 1.00f}},
-  programName_{programName}
+  programName_{programName},
+  reader_{reader}
 {}
 
 void App::Init()
@@ -61,6 +80,14 @@ void App::Init()
   ImGui_ImplOpenGL3_Init(glsl_version);
 
   // Our State
+  if (!reader_.GetRenderData(nullptr, imageTexture_.w, imageTexture_.h, imageTexture_.c))
+    throw std::runtime_error("Error fetching buffer data from mxi");
+  std::vector<uint8_t> data;
+  data.reserve(imageTexture_.w * imageTexture_.h * imageTexture_.c);
+  if (!reader_.GetRenderData(data.data(), imageTexture_.w, imageTexture_.h, imageTexture_.c))
+    throw std::runtime_error("Error fetching buffer data from mxi");
+
+  CreateOpenGLTexture(data.data(), imageTexture_.w, imageTexture_.h, imageTexture_.c, imageTexture_.id);
 }
 
 void App::Run()
@@ -83,6 +110,10 @@ void App::Run()
 
     // Do stuff
     // 2. Show a simple window that we create ourselves. We use a Begin/End pair to create a named window.
+    {
+      ImGui::Begin("Hello, world!");
+      ImGui::Image((void*)(intptr_t)imageTexture_.id, ImVec2(imageTexture_.w, imageTexture_.h));
+    }
     {
       static float f = 0.0f;
       static int counter = 0;

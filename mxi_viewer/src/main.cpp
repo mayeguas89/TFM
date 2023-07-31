@@ -1,4 +1,5 @@
 #include "App.h"
+#include "MxiReader.h"
 #include "argparse/argparse.hpp"
 #include "spdlog/fmt/fmt.h"
 #include "spdlog/spdlog.h"
@@ -28,7 +29,9 @@ int main(int argc, char const* argv[])
 
   auto mxiFile{program.get<std::string>("--mxi-file")};
 
-  App app{PROGRAM_NAME};
+  MxiReader reader{mxiFile};
+  reader.Read();
+  App app{reader, PROGRAM_NAME};
   try
   {
     app.Init();
