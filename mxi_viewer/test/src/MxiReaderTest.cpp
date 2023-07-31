@@ -25,9 +25,8 @@ struct MxiReaderTest: public Test
 TEST_F(MxiReaderTest, MxiReaderGetData)
 {
   int w, h, c;
-  ASSERT_TRUE(reader.GetRenderData(nullptr, w, h, c));
-  std::vector<uint8_t> data;
-  data.reserve(w * h * c);
-  ASSERT_TRUE(reader.GetRenderData(data.data(), w, h, c));
-  stbi_write_bmp("testFile.bmp", w, h, c, data.data());
+  uint8_t* data = nullptr;
+  ASSERT_TRUE(reader.GetRenderData(data, w, h, c, true));
+  ASSERT_TRUE(reader.GetRenderData(data, w, h, c ));
+  stbi_write_bmp("testFile.bmp", w, h, c, data);
 }

@@ -26,7 +26,7 @@ bool MxiReader::Read()
   return true;
 }
 
-bool MxiReader::GetRenderData(uint8_t* data, int& width, int& height, int& components)
+bool MxiReader::GetRenderData(uint8_t*& data, int& width, int& height, int& components, bool justTest )
 {
   // RGB
   static const int COMPONENTS{3};
@@ -34,13 +34,14 @@ bool MxiReader::GetRenderData(uint8_t* data, int& width, int& height, int& compo
   auto w{mxi_->xRes()};
   auto h{mxi_->yRes()};
 
-  if (data == nullptr)
+  if (justTest == true)
   {
     width = w;
     height = h;
     components = COMPONENTS;
     return true;
   }
+
   mx::MxiBuffer buffer;
   if (!mxi_->getRenderBuffer(mx::BITDEPTH_8, false, buffer))
   {
@@ -54,7 +55,10 @@ bool MxiReader::GetRenderData(uint8_t* data, int& width, int& height, int& compo
     return false;
   }
 
-  memcpy(data, reinterpret_cast<uint8_t*>(buffer.getByte()), w * h * COMPONENTS);
+  data = buffer.getByte();
+  width = w;
+  height = h;
+  components = COMPONENTS;
 
   return true;
 }

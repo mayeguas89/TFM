@@ -33,7 +33,7 @@ void CreateOpenGLTexture(uint8_t* data, int width, int height, int components, u
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
 }
 }
 
@@ -80,14 +80,13 @@ void App::Init()
   ImGui_ImplOpenGL3_Init(glsl_version);
 
   // Our State
-  if (!reader_.GetRenderData(nullptr, imageTexture_.w, imageTexture_.h, imageTexture_.c))
+  uint8_t* data = nullptr;
+  if (!reader_.GetRenderData(data, imageTexture_.w, imageTexture_.h, imageTexture_.c, true))
     throw std::runtime_error("Error fetching buffer data from mxi");
-  std::vector<uint8_t> data;
-  data.reserve(imageTexture_.w * imageTexture_.h * imageTexture_.c);
-  if (!reader_.GetRenderData(data.data(), imageTexture_.w, imageTexture_.h, imageTexture_.c))
+  if (!reader_.GetRenderData(data, imageTexture_.w, imageTexture_.h, imageTexture_.c ))
     throw std::runtime_error("Error fetching buffer data from mxi");
 
-  CreateOpenGLTexture(data.data(), imageTexture_.w, imageTexture_.h, imageTexture_.c, imageTexture_.id);
+  CreateOpenGLTexture(data, imageTexture_.w, imageTexture_.h, imageTexture_.c, imageTexture_.id);
 }
 
 void App::Run()
