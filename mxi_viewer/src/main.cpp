@@ -22,8 +22,8 @@ int main(int argc, char const* argv[])
   }
   catch (const std::runtime_error& err)
   {
-    spdlog::error(err.what());
-    spdlog::error(program.help().str());
+    std::cout << err.what();
+    std::cout << program.help().str();
     return 1;
   }
 
@@ -39,7 +39,7 @@ int main(int argc, char const* argv[])
   }
   catch (const std::exception& e)
   {
-    spdlog::error(e.what());
+    std::cout << e.what();
     app.End();
     return 1;
   }

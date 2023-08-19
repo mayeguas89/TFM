@@ -21,10 +21,8 @@ static void GlfwErrorCallback(int error, const char* description)
 }
 
 // Simple helper function to load an image into a OpenGL texture with common settings
-void CreateOpenGLTexture(uint8_t* data, int width, int height, int components, unsigned int& out_texture)
+void SetOpenGLTexture(uint8_t* data, int width, int height, int components, unsigned int out_texture)
 {
-  // Create a OpenGL texture identifier
-  glGenTextures(1, &out_texture);
   glBindTexture(GL_TEXTURE_2D, out_texture);
 
   // Setup filtering parameters for display
@@ -83,10 +81,12 @@ void App::Init()
   uint8_t* data = nullptr;
   if (!reader_.GetRenderData(data, imageTexture_.w, imageTexture_.h, imageTexture_.c, true))
     throw std::runtime_error("Error fetching buffer data from mxi");
-  if (!reader_.GetRenderData(data, imageTexture_.w, imageTexture_.h, imageTexture_.c ))
+  if (!reader_.GetRenderData(data, imageTexture_.w, imageTexture_.h, imageTexture_.c))
     throw std::runtime_error("Error fetching buffer data from mxi");
 
-  CreateOpenGLTexture(data, imageTexture_.w, imageTexture_.h, imageTexture_.c, imageTexture_.id);
+  // Create a OpenGL texture identifier
+  glGenTextures(1, &imageTexture_.id);
+  SetOpenGLTexture(data, imageTexture_.w, imageTexture_.h, imageTexture_.c, imageTexture_.id);
 }
 
 void App::Run()
@@ -112,16 +112,78 @@ void App::Run()
     {
       ImGui::Begin("Hello, world!");
       ImGui::Image((void*)(intptr_t)imageTexture_.id, ImVec2(imageTexture_.w, imageTexture_.h));
-    }
-    {
       static float f = 0.0f;
       static int counter = 0;
 
-      ImGui::Begin("Hello, world!");               // Create a window called "Hello, world!" and append into it.
+      ImGui::Text("This is some useful text."); // Display some text (you can use a format strings too)
+      {
+        static size_t itemCurrentIdx{0};
+        static const std::vector<std::string> RenderChannels{MxiReader::GetRenderChannels()};
+        auto comboPrevVal{RenderChannels.at(itemCurrentIdx)};
+        static int subChannels{-1};
+        if (ImGui::BeginCombo("RenderChannels", comboPrevVal.c_str()))
+        {
+          for (size_t i = 0; i < RenderChannels.size(); i++)
+          {
+            auto renderChannel{RenderChannels.at(i)};
+            const bool isSelected{comboPrevVal == renderChannel};
+            if (ImGui::Selectable(renderChannel.c_str(), isSelected))
+            {
+              itemCurrentIdx = i;
+              auto channel{MxiReader::RenderChannelsMap[RenderChannels.at(i)]};
+              // Our State
+              uint8_t* data = nullptr;
+              reader_.GetChannelData(channel,
+                                     subChannels,
+                                     data,
+                                     imageTexture_.w,
+                                     imageTexture_.h,
+                                     imageTexture_.c,
+                                     true);
+            }
+          }
+          ImGui::EndCombo();
+        }
+        if (subChannels > 0)
+        {
+          static size_t itemSCurrentIdx{0};
 
-      ImGui::Text("This is some useful text.");    // Display some text (you can use a format strings too)
+          std::vector<std::string> subChannelsList;
+          for (int i = 0; i < subChannels; i++)
+          {
+            subChannelsList.push_back(std::to_string(i));
+          }
+          auto comboSPrevVal{subChannelsList.at(itemSCurrentIdx)};
+          if (ImGui::BeginCombo("SubChannels", comboSPrevVal.c_str()))
+          {
+            for (size_t i = 0; i < subChannelsList.size(); i++)
+            {
+              auto sChannel{subChannelsList.at(i)};
+              const bool isSelected{comboSPrevVal == sChannel};
+              if (ImGui::Selectable(sChannel.c_str(), isSelected))
+              {
+                itemSCurrentIdx = i;
+              }
+            }
+            ImGui::EndCombo();
+          }
+          if (ImGui::Button("Ok"))
+          {
+            int subChannelSelected{std::atoi(subChannelsList.at(itemSCurrentIdx).c_str())};
+            auto channel{MxiReader::RenderChannelsMap[RenderChannels.at(itemCurrentIdx)]};
+            uint8_t* data = nullptr;
+            if (reader_.GetChannelData(channel,
+                                       subChannelSelected,
+                                       data,
+                                       imageTexture_.w,
+                                       imageTexture_.h,
+                                       imageTexture_.c))
+              SetOpenGLTexture(data, imageTexture_.w, imageTexture_.h, imageTexture_.c, imageTexture_.id);
+          }
+        }
+      }
 
-      ImGui::SliderFloat("float", &f, 0.0f, 1.0f); // Edit 1 float using a slider from 0.0f to 1.0f
+      ImGui::SliderFloat("float", &f, 0.0f, 1.0f);            // Edit 1 float using a slider from 0.0f to 1.0f
       ImGui::ColorEdit3("clear color", (float*)&clearColor_); // Edit 3 floats representing a color
 
       if (ImGui::Button(

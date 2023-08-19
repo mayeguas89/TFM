@@ -2,6 +2,7 @@ add_subdirectory(glfw)
 add_subdirectory(spdlog)
 add_subdirectory(argparse)
 add_subdirectory(gtest)
+add_subdirectory(nlohmann_json)
 
 add_subdirectory(glad/cmake)
 glad_add_library(glad STATIC EXCLUDE_FROM_ALL API gl:core=3.0)
