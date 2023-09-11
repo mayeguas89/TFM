@@ -6,6 +6,11 @@
 #include <algorithm>
 #include <vector>
 
+struct Ghost
+{
+  int lensIndexOne;
+  int lensIndexTwo;
+};
 struct Camera
 {
   Vec3 w;
@@ -73,5 +78,20 @@ struct Camera
   {
     const auto& interface = interfaces.back();
     return interface.thickness;
+  }
+
+  std::vector<Ghost> GhostEnumeration() const
+  {
+    std::vector<Ghost> ghostEnumeration;
+    for (int i = 0; i < interfaces.size(); i++)
+    {
+      for (int j = 0; j < interfaces.size(); j++)
+      {
+        if (i == j || interfaces.at(j).radius == 0.f || j < i)
+          continue;
+        ghostEnumeration.emplace_back(j, i);
+      }
+    }
+    return ghostEnumeration;
   }
 };
