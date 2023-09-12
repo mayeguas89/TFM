@@ -24,4 +24,5 @@ find_package(MAXWELL REQUIRED)
 add_subdirectory(externals)
 add_subdirectory(mxi_viewer)
 add_subdirectory(lens_raytracer)
+add_subdirectory(parallel_lens_raytracer)
 

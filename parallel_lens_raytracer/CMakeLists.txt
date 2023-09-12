@@ -1,5 +1,5 @@
 
-project(LensRayTracer CUDA CXX C)  # enable cuda language
+project(ParallelLensRayTracer CUDA CXX C)  # enable cuda language
 
 set(CMAKE_CUDA_STANDARD 17)
 set(CMAKE_CXX_STANDARD 20)
@@ -9,7 +9,7 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
 endif()
 
 add_definitions(-DUSE_CUDA)
-add_executable(${PROJECT_NAME} src/main.cc src/App.cpp)
+add_executable(${PROJECT_NAME} src/main.cc src/App.cc src/RayTrace.cu)
 target_include_directories(${PROJECT_NAME} PRIVATE 
   ${CMAKE_CURRENT_SOURCE_DIR}/src
   ${GLAD_DIR}/include
@@ -27,24 +27,11 @@ target_link_libraries(${PROJECT_NAME}
  spdlog::spdlog
  nlohmann_json::nlohmann_json
 )
+set_target_properties(${PROJECT_NAME} PROPERTIES CUDA_ARCHITECTURES OFF)
 
 add_custom_command(
   TARGET ${PROJECT_NAME} 
   POST_BUILD
   COMMAND ${CMAKE_COMMAND}
   ARGS -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/lenses ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/lenses
-)
-
-add_executable(LensViewerUnitTest 
-  test/src/LensViewerTest.cpp
-)
-
-target_include_directories(LensViewerUnitTest PRIVATE 
-  ${CMAKE_CURRENT_SOURCE_DIR}/src
-)
-
-target_link_libraries(LensViewerUnitTest PRIVATE 
-  gtest_main
-  nlohmann_json
-  spdlog::spdlog
 )

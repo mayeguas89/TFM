@@ -697,6 +697,8 @@ void App::Run()
       static float xPos2{200.f};
       static float gridX{30.f};
       static float gridY{30.f};
+      static bool showAperture{false};
+      static bool showLight{false};
       ImGui::Begin("Sensor Plane");
 
       auto pos = ImGui::GetCursorScreenPos();
@@ -747,6 +749,8 @@ void App::Run()
       ImGui::InputFloat("Radius", &radius, 0.001f, 0.5f, "%.3f");
       ImGui::InputFloat("gridX", &gridX, 10.f, 100.f, "%.0f");
       ImGui::InputFloat("gridY", &gridY, 10.f, 100.f, "%.0f");
+      ImGui::Checkbox("Show aperture", &showAperture);
+      ImGui::Checkbox("Show light", &showLight);
 
       auto drawList = ImGui::GetWindowDrawList();
       drawList->AddRect(ImVec2{pos.x + xPos2, pos.y + yPos2},
@@ -777,28 +781,33 @@ void App::Run()
         float gridIndexX{(intersection.x() * scale - minX) / (xStep)};
         float gridIndexY{(intersection.y() * scale - minY) / (yStep)};
         drawList->AddCircle(center, radius * scale, colorU32);
-        drawList->AddRectFilled(
-          ImVec2{pos.x + xPos2 + (int)gridIndexX * xStep, pos.y + yPos2 + (int)gridIndexY * yStep},
-          ImVec2{pos.x + xPos2 + ((int)gridIndexX + 1) * xStep, pos.y + yPos2 + ((int)gridIndexY + 1) * yStep},
-          colorU32);
+        if (showAperture)
+        {
+          drawList->AddRectFilled(
+            ImVec2{pos.x + xPos2 + (int)gridIndexX * xStep, pos.y + yPos2 + (int)gridIndexY * yStep},
+            ImVec2{pos.x + xPos2 + ((int)gridIndexX + 1) * xStep, pos.y + yPos2 + ((int)gridIndexY + 1) * yStep},
+            colorU32);
+        }
         index++;
       }
 
-      for (const auto& intersection: lightIntersections_)
+      if (showLight)
       {
-        ImColor color{1.f, 1.f, 1.f, 0.25f};
-        auto colorU32{ImGui::ColorConvertFloat4ToU32(color)};
-        auto center =
-          ImVec2{pos.x + xPos2 + intersection.x() * scale - minX, pos.y + yPos2 + intersection.y() * scale - minY};
-        float gridIndexX{(intersection.x() * scale - minX) / (xStep)};
-        float gridIndexY{(intersection.y() * scale - minY) / (yStep)};
-        drawList->AddRectFilled(
-          ImVec2{pos.x + xPos2 + (int)gridIndexX * xStep, pos.y + yPos2 + (int)gridIndexY * yStep},
-          ImVec2{pos.x + xPos2 + ((int)gridIndexX + 1) * xStep, pos.y + yPos2 + ((int)gridIndexY + 1) * yStep},
-          colorU32);
-        index++;
+        for (const auto& intersection: lightIntersections_)
+        {
+          ImColor color{1.f, 1.f, 1.f, 0.25f};
+          auto colorU32{ImGui::ColorConvertFloat4ToU32(color)};
+          auto center = ImVec2{pos.x + xPos2 + intersection.x() * scale - minX,
+                               pos.y + yPos2 + intersection.y() * scale - minY};
+          float gridIndexX{(intersection.x() * scale - minX) / (xStep)};
+          float gridIndexY{(intersection.y() * scale - minY) / (yStep)};
+          drawList->AddRectFilled(
+            ImVec2{pos.x + xPos2 + (int)gridIndexX * xStep, pos.y + yPos2 + (int)gridIndexY * yStep},
+            ImVec2{pos.x + xPos2 + ((int)gridIndexX + 1) * xStep, pos.y + yPos2 + ((int)gridIndexY + 1) * yStep},
+            colorU32);
+          index++;
+        }
       }
-
       ImGui::End();
     }
 
