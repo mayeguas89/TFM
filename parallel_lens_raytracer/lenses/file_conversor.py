@@ -23,6 +23,12 @@ for element in root.find("elements").findall("element"):
             d["radius"] = float(child.text)
         if child.tag == "refractiveIndex":
             d["ior"] = float(child.text)
+        if child.tag == "abbeNumber":
+            d["abbeNumber"] = float(child.text)
+        if child.tag == "coatingLambda":
+            d["coatingLambda"] = float(child.text)
+        if child.tag == "coatingIor":
+            d["coatingIor"] = float(child.text)
     interfaces.append(d)
 
 print(interfaces)

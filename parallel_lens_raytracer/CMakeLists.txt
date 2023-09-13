@@ -24,7 +24,7 @@ target_link_libraries(${PROJECT_NAME}
  glad
  glfw
  Imgui
- spdlog::spdlog
+  spdlog::spdlog
  nlohmann_json::nlohmann_json
 )
 set_target_properties(${PROJECT_NAME} PROPERTIES CUDA_ARCHITECTURES OFF)

@@ -93,7 +93,9 @@ __global__ void ParallelRayTrace(const Parameters parameters,
   const Vec3 vertical{0.f, -(float)(parameters.height)};
   const float delta_u = parameters.width / (float)w;
   const float delta_v = parameters.height / (float)h;
-  const Vec3 gridUpperLeft = camera.InterfaceAt(0).position - 0.5f * (horizontal + vertical);
+  const Vec3 gridUpperLeft = camera.InterfaceAt(0).position
+                             + Vec3{parameters.light.position.x(), parameters.light.position.y()}
+                             - 0.5f * (horizontal + vertical);
   const Vec3 cell00Loc = gridUpperLeft + 0.5 * Vec3{delta_u, -delta_v};
 
   // Build the ray in from the parameters

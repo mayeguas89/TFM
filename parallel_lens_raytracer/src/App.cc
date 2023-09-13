@@ -40,7 +40,9 @@ static void DrawLensInterface(const LensInterface& interface,
 {
   static float _thickness = 1.0f;
   auto drawList = ImGui::GetWindowDrawList();
-  const auto& [radius, thickness, _1, apertureDiameter, _2, _3] = interface;
+  const auto& radius = interface.radius;
+  const auto& thickness = interface.thickness;
+  const auto& apertureDiameter = interface.apertureDiameter;
   // spdlog::info("radius: {}, thickness: {}, apertureDiamter: {}", radius, thickness, apertureDiameter);
   float x = std::fabs(radius);
   float y = apertureDiameter / 2.f;
@@ -105,9 +107,10 @@ static void DrawIntersections(const std::vector<std::vector<Vec3>>& intersection
   }
 }
 
-static void DrawSensorIntersections(const std::vector<float3>& sensorIntersections, const Parameters& params)
+static void
+  DrawSensorIntersections(const std::vector<float3>& sensorIntersections, const Parameters& params)
 {
-  static float scale{20.f};
+    static float scale{20.f};
   static float yPos{300.f};
   static float xPos{200.f};
   ImGui::Begin("SensorIntersections");
@@ -281,20 +284,22 @@ void App::Run()
       ImGui::InputInt("Light Samples Y", &samplesInY);
       ImGui::ColorEdit3("Light Color", (float*)&lightColor);
 
+      Parameters params;
+      params.camera = parameters_.camera;
+      params.camera.SetApertureStop(apertureDiameter);
+      params.camera.SetFocus(focusDistance);
+      params.light.position = Vec3{lightPosition[0], lightPosition[1], lightPosition[2]};
+      params.light.direction = Vec3{lightDirection[0], lightDirection[1], lightDirection[2]};
+      params.light.color = Vec3{lightColor.x, lightColor.y, lightColor.z};
+      params.light.width = lightWidth;
+      params.light.height = lightHeight;
+      params.width = lightWidth;
+      params.height = lightHeight;
+      params.samplesInX = samplesInX;
+      params.samplesInY = samplesInY;
+
+      if (ImGui::Button("Render"))
       {
-        Parameters params;
-        params.camera = parameters_.camera;
-        params.camera.SetApertureStop(apertureDiameter);
-        params.camera.SetFocus(focusDistance);
-        params.light.position = Vec3{lightPosition[0], lightPosition[1], lightPosition[2]};
-        params.light.direction = Vec3{lightDirection[0], lightDirection[1], lightDirection[2]};
-        params.light.color = Vec3{lightColor.x, lightColor.y, lightColor.z};
-        params.light.width = lightWidth;
-        params.light.height = lightHeight;
-        params.width = lightWidth;
-        params.height = lightHeight;
-        params.samplesInX = samplesInX;
-        params.samplesInY = samplesInY;
         if (!(params == parameters_))
         {
           parameters_ = params;
@@ -315,14 +320,6 @@ void App::Run()
       {
         ghost = ghosts.size() - 1;
       }
-
-      auto rayUnit{unit_vector({lightDirection[0], lightDirection[1], lightDirection[2]})};
-      auto alphaYZ = std::atan2(rayUnit.y(), rayUnit.z());
-      alphaYZ += M_PI_2;
-      auto cos{std::cos(alphaYZ)};
-      auto sin{std::sin(alphaYZ)};
-      float stepY{lightHeight / (float)samplesInY};
-      float stepX{lightWidth / (float)samplesInX};
 
       // Sensor
       drawList->AddLine(ImVec2{pos.x + parameters_.camera.LensFrontZ() * scale, pos.y},
@@ -409,7 +406,8 @@ void App::CalculateLensIntersections(const size_t ghostIndex)
   const auto maxSamplesY{min((float)parameters_.samplesInY, 10.f)};
   const auto& camera = parameters_.camera;
   const Vec3 vertical{0.f, -(float)(parameters_.height)};
-  const Vec3 gridTop = camera.InterfaceAt(0).position - 0.5f * vertical;
+  const Vec3 gridTop = camera.InterfaceAt(0).position
+                       + Vec3{parameters_.light.position.x(), parameters_.light.position.y()} - 0.5f * vertical;
   const float delta_v = parameters_.height / maxSamplesY;
   Ray rayIn;
   for (int y = 0; y < maxSamplesY; y++)

@@ -28,8 +28,29 @@ struct LensInterface
   float thickness;        //mm
   float ior;
   float apertureDiameter; // diameter mm
-  Vec3 position;          // global position of where the lens is drawn in the diagram not the center
+  float abbeNumber;
+  float coatingIor;
+  float coatingLambda;
+  Vec3 position; // global position of where the lens is drawn in the diagram not the center
   Type type{Type::Spherical};
+
+  /// Computes the index of refraction corresponding to the paramater
+  /// wavelength, by using the refractive index at the d-line and the abbe
+  /// number of the element.
+  ///
+  /// \param lambda Desired wavelength, in nanometers.
+  float ComputeIOR(float lambda) const
+  {
+    // Convert the wavelength to micrometers
+    float lambdaMicro = lambda * 0.001f;
+
+    // Compute the coefficients
+    float B = ((ior - 1.0f) / abbeNumber) * 0.52345f;
+    float A = ior - (B / 0.34522792f);
+
+    // Return the result
+    return A + B / (lambdaMicro * lambdaMicro);
+  }
 
   __host__ __device__ Intersection GetIntersection(const Ray& ray) const
   {

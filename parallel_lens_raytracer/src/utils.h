@@ -27,12 +27,18 @@ inline static std::vector<LensInterface> ReadLensFile(const std::string lensFile
   {
     float radius, ior, thickness, apertureDiameter;
     if (!(interface.contains("radius") && interface.contains("thickness") && interface.contains("ior")
-          && interface.contains("apertureDiameter")))
+          && interface.contains("apertureDiameter") && interface.contains("abbeNumber")
+          && interface.contains("coatingLambda") && interface.contains("coatingIor")))
       spdlog::error("Lens {} is missing any of the fields: radius, thickness, ior or apertureDiameter", lensIndex);
-    lens.push_back({.radius{interface["radius"]},
-                    .thickness{interface["thickness"]},
-                    .ior{interface["ior"]},
-                    .apertureDiameter{interface["apertureDiameter"]}});
+    lens.push_back({
+      .radius{interface["radius"]},
+      .thickness{interface["thickness"]},
+      .ior{interface["ior"]},
+      .apertureDiameter{interface["apertureDiameter"]},
+      .abbeNumber{interface["abbeNumber"]},
+      .coatingIor{interface["coatingIor"]},
+      .coatingLambda{interface["coatingLambda"]},
+    });
     lensIndex++;
   }
   return lens;
