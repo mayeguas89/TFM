@@ -16,6 +16,8 @@ struct Parameters
   // Samples in the grid
   int samplesInX{0};
   int samplesInY{0};
+  bool spectral{false};
+  int ghost{0};
 
   Parameters& operator=(const Parameters& other)
   {
@@ -25,12 +27,14 @@ struct Parameters
     this->height = other.height;
     this->samplesInX = other.samplesInX;
     this->samplesInY = other.samplesInY;
+    this->spectral = other.spectral;
+    this->ghost = other.ghost;
     return *this;
   }
 };
 
 inline bool operator==(const Parameters& rhs, const Parameters& lhs)
 {
-  return std::tie(rhs.camera, rhs.light, rhs.samplesInX, rhs.samplesInY, rhs.height, rhs.width)
-         == std::tie(lhs.camera, lhs.light, lhs.samplesInX, lhs.samplesInY, lhs.height, lhs.width);
+  return std::tie(rhs.camera, rhs.light, rhs.samplesInX, rhs.samplesInY, rhs.height, rhs.width, rhs.spectral)
+         == std::tie(lhs.camera, lhs.light, lhs.samplesInX, lhs.samplesInY, lhs.height, lhs.width, lhs.spectral);
 }

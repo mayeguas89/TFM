@@ -23,8 +23,9 @@ target_link_libraries(${PROJECT_NAME}
  argparse::argparse
  glad
  glfw
+ glm::glm
  Imgui
-  spdlog::spdlog
+ spdlog::spdlog
  nlohmann_json::nlohmann_json
 )
 set_target_properties(${PROJECT_NAME} PROPERTIES CUDA_ARCHITECTURES OFF)
@@ -34,4 +35,19 @@ add_custom_command(
   POST_BUILD
   COMMAND ${CMAKE_COMMAND}
   ARGS -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/lenses ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/lenses
+)
+
+
+add_executable(MyTest 
+  test/src/MyTest.cpp
+)
+
+# target_include_directories(MyTest PRIVATE 
+#   ${CMAKE_CURRENT_SOURCE_DIR}/src
+# )
+
+target_link_libraries(MyTest PRIVATE 
+  gtest_main
+  glm::glm
+  spdlog::spdlog
 )

@@ -24,7 +24,7 @@ private:
   std::string programName_;
   GLFWwindow* window_{nullptr};
   ImVec4 clearColor_;
-  bool hasToRender_{true};
+  bool hasToRender_{false};
   bool hasToCalculateIntersections_{true};
   std::vector<float3> sensorIntersections_;
   std::vector<float2> intersectionsWithAperture_;

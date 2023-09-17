@@ -1,5 +1,6 @@
 #pragma once
 
+#include "ColorSpace.h"
 #include "vec3.h"
 
 struct Light
@@ -10,6 +11,8 @@ struct Light
   Vec3 direction;
   float width{0.f};
   float height{0.f};
+  Vec3 lambda;
+  float intensity{1.f};
 
   Light& operator=(const Light& other)
   {
@@ -18,6 +21,8 @@ struct Light
     this->direction = other.direction;
     this->width = other.width;
     this->height = other.height;
+    this->lambda = other.lambda;
+    this->intensity = other.intensity;
     return *this;
   }
 };

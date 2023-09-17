@@ -1,0 +1,47 @@
+[
+  {
+    "apertureDiameter": 24.0,
+    "thickness": 9.6,
+    "radius": 65.220001,
+    "ior": 1.5,
+    "abbeNumber": 50.0,
+    "coatingLambda": 620.0,
+    "coatingIor": 1.38
+  },
+  {
+    "apertureDiameter": 24.0,
+    "thickness": 4.2,
+    "radius": -62.029999,
+    "ior": 1.5,
+    "abbeNumber": 50.0,
+    "coatingLambda": 620.0,
+    "coatingIor": 1.38
+  },
+  {
+    "apertureDiameter": 24.0,
+    "thickness": 5.0,
+    "radius": -1240.670044,
+    "ior": 1.0,
+    "abbeNumber": 89.300003,
+    "coatingLambda": 620.0,
+    "coatingIor": 1.38
+  },
+  {
+    "apertureDiameter": 20.0,
+    "thickness": 105.0,
+    "radius": 0.0,
+    "ior": 1.0,
+    "abbeNumber": 89.300003,
+    "coatingLambda": 620.0,
+    "coatingIor": 1.38
+  },
+  {
+    "apertureDiameter": 18.0,
+    "thickness": 0.001,
+    "radius": 0.0,
+    "ior": 1.0,
+    "abbeNumber": 89.300003,
+    "coatingLambda": 0.0,
+    "coatingIor": 0.0
+  }
+]

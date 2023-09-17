@@ -25,3 +25,6 @@
 [submodule "externals/nlohmann_json"]
 	path = externals/nlohmann_json
 	url = https://github.com/nlohmann/json.git
+[submodule "externals/glm"]
+	path = externals/glm
+	url = https://github.com/g-truc/glm.git

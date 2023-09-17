@@ -38,7 +38,7 @@ public:
     return Vec3(-x_, -y_, -z_);
   }
 
-  __host__ __device__ inline float operator[](size_t index)
+  __host__ __device__ inline float operator[](int index) const
   {
     if (index > 2)
       return -1.f;
@@ -55,6 +55,7 @@ public:
         return z_;
         break;
     }
+    return -1.f;
   }
 
   __host__ __device__ inline Vec3& operator+=(const Vec3& other);
@@ -79,7 +80,7 @@ public:
   }
   __host__ __device__ inline void make_unit_vector();
 
-  __device__ inline uchar3 touchar3()
+  __device__ inline uchar3 touchar3() const
   {
     return make_uchar3(toInt(x_), toInt(y_), toInt(z_));
   }
@@ -201,6 +202,12 @@ __host__ __device__ inline Vec3 unit_vector(Vec3 v)
 __host__ __device__ inline float clamp(float x)
 {
   return (x < 0.f) ? 0.f : (x > 1.f) ? 1.f : x;
+}
+
+template<typename T>
+__host__ __device__ inline T clamp(T x, T min, T max)
+{
+  return (x < min) ? min : (x > max) ? max : x;
 }
 
 __host__ __device__ inline int toInt(float x)

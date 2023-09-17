@@ -39,7 +39,7 @@ struct LensInterface
   /// number of the element.
   ///
   /// \param lambda Desired wavelength, in nanometers.
-  float ComputeIOR(float lambda) const
+  __host__ __device__ float ComputeIOR(float lambda) const
   {
     // Convert the wavelength to micrometers
     float lambdaMicro = lambda * 0.001f;
@@ -114,5 +114,7 @@ struct LensInterface
 inline bool operator==(const LensInterface& rhs, const LensInterface& lhs)
 {
   return rhs.radius == lhs.radius && rhs.thickness == lhs.thickness && rhs.ior == lhs.ior
-         && rhs.apertureDiameter == lhs.apertureDiameter && rhs.position == lhs.position;
+         && rhs.apertureDiameter == lhs.apertureDiameter && rhs.position == lhs.position
+         && rhs.abbeNumber == lhs.abbeNumber && rhs.coatingIor == lhs.coatingIor
+         && rhs.coatingLambda == lhs.coatingLambda;
 }
