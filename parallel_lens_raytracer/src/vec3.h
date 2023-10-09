@@ -16,6 +16,12 @@ public:
     y_ = y;
     z_ = z;
   }
+  __host__ __device__ Vec3(uchar4 color)
+  {
+    x_ = color.x / 255.f;
+    y_ = color.y / 255.f;
+    z_ = color.z / 255.f;
+  }
   __host__ __device__ inline float x() const
   {
     return x_;

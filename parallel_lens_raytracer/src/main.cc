@@ -6,7 +6,7 @@
 #include <string>
 
 static const std::string PROGRAM_NAME{"LensRayTracer"};
-static const std::string LENS_FILE{"./lenses/nikon-zoom-short.json"};
+static const std::string LENS_FILE{"./lenses/nikon-zoom-long.json"};
 
 int main(int argc, char const* argv[])
 {

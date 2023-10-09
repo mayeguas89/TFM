@@ -32,7 +32,8 @@
 
 void RayTrace(const Parameters& parameters,
               std::vector<float3>& sensorPixels,
-              std::vector<float2> intersectionsWithAperture);
+              std::vector<float2> intersectionsWithAperture,
+              std::vector<unsigned int>& texturesId);
 
 namespace
 {
@@ -43,14 +44,6 @@ static float GetRandom()
   std::mt19937 gen(rd());
   std::uniform_real_distribution<> dis(0, 1);
   return dis(gen);
-}
-
-static Vec3 GetRandomInUnitDisk()
-{
-  float x = GetRandom() * 2.f - 1.f;
-  float y = GetRandom() * 2.f - 1.f;
-  float z = 0.f;
-  return unit_vector(Vec3{x, y, z});
 }
 
 // Simple helper function to load an image into a OpenGL texture with common settings
@@ -225,40 +218,44 @@ static void DrawSensorIntersections(const std::vector<float3>& sensorIntersectio
       pos = ImVec2{pos.x + xPos, pos.y + yPos};
       auto drawList = ImGui::GetWindowDrawList();
 
-      auto minX = std::max_element(sensorIntersections.begin(),
-                                   sensorIntersections.end(),
-                                   [](const auto& a, const auto& b) { return a.x > b.x; })
-                    ->x;
-      auto minY = std::max_element(sensorIntersections.begin(),
-                                   sensorIntersections.end(),
-                                   [](const auto& a, const auto& b) { return a.y > b.y; })
-                    ->y;
-      auto maxX = std::max_element(sensorIntersections.begin(),
-                                   sensorIntersections.end(),
-                                   [](const auto& a, const auto& b) { return a.x < b.x; })
-                    ->x;
-      auto maxY = std::max_element(sensorIntersections.begin(),
-                                   sensorIntersections.end(),
-                                   [](const auto& a, const auto& b) { return a.y < b.y; })
-                    ->y;
+      // auto minX = std::max_element(sensorIntersections.begin(),
+      //                              sensorIntersections.end(),
+      //                              [](const auto& a, const auto& b) { return a.x > b.x; })
+      //               ->x;
+      // auto minY = std::max_element(sensorIntersections.begin(),
+      //                              sensorIntersections.end(),
+      //                              [](const auto& a, const auto& b) { return a.y > b.y; })
+      //               ->y;
+      // auto maxX = std::max_element(sensorIntersections.begin(),
+      //                              sensorIntersections.end(),
+      //                              [](const auto& a, const auto& b) { return a.x < b.x; })
+      //               ->x;
+      // auto maxY = std::max_element(sensorIntersections.begin(),
+      //                              sensorIntersections.end(),
+      //                              [](const auto& a, const auto& b) { return a.y < b.y; })
+      //               ->y;
 
-      const int2 gridSize{(int)ceil(maxX - minX) + 1, (int)ceil(maxY - minY) + 1};
+      // const int2 gridSize{(int)ceil(maxX - minX) + 1, (int)ceil(maxY - minY) + 1};
 
       // drawList->AddRectFilled(
       //   ImVec2{pos.x - (float)gridSize.x / 2.f * scale, pos.y - (float)gridSize.y / 2.f * scale},
       //   ImVec2{pos.x + (float)gridSize.x / 2.f * scale, pos.y + (float)gridSize.y / 2.f * scale},
       //   IM_COL32(0, 0, 0, 255));
-      float delta_u = gridSize.x / (float)numSamplesX;
-      float delta_v = gridSize.y / (float)numSamplesY;
+      // float delta_u = gridSize.x / (float)numSamplesX;
+      // float delta_v = gridSize.y / (float)numSamplesY;
+      float delta_u = params.camera.filmWidth / (float)numSamplesX;
+      float delta_v = params.camera.filmHeight / (float)numSamplesY;
 
-      auto numGhosts = params.camera.GhostEnumeration().size() + 1;
+      float rayBounds = (params.camera.interfaces.at(1).apertureDiameter / (float)params.division)
+                        * (params.camera.interfaces.at(1).apertureDiameter / (float)params.division);
+      const auto& ghosts = params.camera.GetGhosts();
+      auto numGhosts = ghosts.size() + 1;
       const auto& w = params.samplesInX;
       const auto& h = params.samplesInY;
       const int numberOfRays{w * h};
       const auto& rectSize = 0.5f;
       std::vector<std::vector<std::pair<Vec3, float>>> colorsGrid(numSamplesX * numSamplesY,
                                                                   {{{0.f, 0.f, 0.f}, 1.f}});
-
       int lambdaFor = (params.spectral) ? 3 : 1;
       int i{0};
       switch (renderWhat)
@@ -289,20 +286,44 @@ static void DrawSensorIntersections(const std::vector<float3>& sensorIntersectio
       {
         for (int l = 0; l < lambdaFor; l++)
         {
+          auto begin = (3 * i + l) * (w * h);
+          auto end = (3 * i + (l + 1)) * (w * h) - 1;
+          auto ghostMinX = std::max_element(sensorIntersections.begin() + begin,
+                                            sensorIntersections.begin() + end,
+                                            [](const auto& a, const auto& b) { return a.x > b.x; })
+                             ->x;
+          auto ghostMinY = std::max_element(sensorIntersections.begin() + begin,
+                                            sensorIntersections.begin() + end,
+                                            [](const auto& a, const auto& b) { return a.y > b.y; })
+                             ->y;
+          auto ghostMaxX = std::max_element(sensorIntersections.begin() + begin,
+                                            sensorIntersections.begin() + end,
+                                            [](const auto& a, const auto& b) { return a.x < b.x; })
+                             ->x;
+          auto ghostMaxY = std::max_element(sensorIntersections.begin() + begin,
+                                            sensorIntersections.begin() + end,
+                                            [](const auto& a, const auto& b) { return a.y < b.y; })
+                             ->y;
+          float sensorBounds = std::abs(ghostMaxX - ghostMinX) * std::abs(ghostMaxY - ghostMinY);
+          if (i < ghosts.size())
+          {
+            rayBounds = ghosts.at(i).bounds[l].x * ghosts.at(i).bounds[l].y;
+          }
+          float intensity = rayBounds / sensorBounds;
           int numberOfIncomingRays{0};
           for (int x = 0; x < w; x++)
           {
             for (int y = 0; y < h; y++)
             {
               auto index = (3 * i + l) * (w * h) + (y * w + x);
-              int gridX = (int)floor((sensorIntersections[index].x - minX) / delta_u);
-              int gridY = (int)floor((sensorIntersections[index].y - minY) / delta_v);
-              auto positionX = (sensorIntersections[index].x - rectSize / 2.f) * scale + pos.x;
-              auto positionY = (sensorIntersections[index].y - rectSize / 2.f) * scale + pos.y;
+              int gridX = (int)floor((sensorIntersections[index].x + params.camera.filmWidth / 2.f) / delta_u);
+              int gridY = (int)floor((sensorIntersections[index].y + params.camera.filmHeight / 2.f) / delta_v);
+              // auto positionX = (sensorIntersections[index].x - rectSize / 2.f) * scale + pos.x;
+              // auto positionY = (sensorIntersections[index].y - rectSize / 2.f) * scale + pos.y;
               Vec3 lightColor = (params.spectral) ? lambda2RGB(params.light.lambda[l], 1.f) : params.light.color;
-              Vec3 color = {sensorIntersections[index].z * lightColor.x(),
-                            sensorIntersections[index].z * lightColor.y(),
-                            sensorIntersections[index].z * lightColor.z()};
+              Vec3 color = {sensorIntersections[index].z * lightColor.x() * intensity,
+                            sensorIntersections[index].z * lightColor.y() * intensity,
+                            sensorIntersections[index].z * lightColor.z() * intensity};
               // Si el color obtenido es negro no hacemos nada
               if (color.near_zero())
               {
@@ -366,9 +387,6 @@ static void DrawSensorIntersections(const std::vector<float3>& sensorIntersectio
         {
           for (int y = 0; y < numSamplesY; y++)
           {
-            // if (!colorGridCopy.at(y * numSamplesX + x).near_zero())
-            //   continue;
-
             Vec3 color;
             for (int i = -halfFilter; i <= halfFilter; i++)
             {
@@ -526,10 +544,15 @@ void App::Run()
       static ImVec4 lightColorSpectral[3] = {{1.f, 1.f, 1.f, 1.f}, {1.f, 1.f, 1.f, 1.f}, {1.f, 1.f, 1.f, 1.f}};
       static ImVec4 lightColor = {1.f, 1.f, 1.f, 1.f};
       static float lightDirection[3] = {0.f, 0.f, -1.f};
-      static float lightPosition[3] = {0.f, 0.f, 0.1f};
-      static int samplesInX{10};
-      static int samplesInY{10};
+      static float lightPosition[3] = {80.f, 30.f, 1000.f};
+      static int samplesInX{100};
+      static int samplesInY{100};
       static bool apertureCircular{true};
+      static int division{1};
+      static bool useGhostBounds{false};
+
+      bool render{false};
+
       ImGui::Begin("Data");
       ImGui::InputFloat("Scale", &scale, 1.f, 100.f, "%.0f");
       ImGui::InputFloat("xPos", &xPos, 10.f, 500.f, "%.0f");
@@ -590,6 +613,8 @@ void App::Run()
         ImGui::ColorEdit3("Light Color 3", (float*)&lightColorSpectral[2], ImGuiColorEditFlags_NoInputs);
       }
       ImGui::ColorEdit3("Light Color", (float*)&lightColor);
+      ImGui::InputInt("Aperture Division", &division);
+      ImGui::Checkbox("Use Ghost Bounds", &useGhostBounds);
 
       Parameters params;
       params.camera = parameters_.camera;
@@ -610,7 +635,8 @@ void App::Run()
       params.samplesInY = samplesInY;
       params.spectral = spectral;
       params.ghost = ghost;
-      parameters_.ghost = ghost;
+      params.division = division;
+      params.useGhostBounds = useGhostBounds;
 
       if (ImGui::Button("Render"))
       {
@@ -651,12 +677,15 @@ void App::Run()
 
       if (hasToCalculateIntersections_)
       {
+        parameters_.ghost = ghost;
+        render = true;
         hasToCalculateIntersections_ = false;
         intersections_.clear();
+        if (useGhostBounds)
+          CalculateGhostLimits();
         CalculateLensIntersections(ghost);
       }
 
-      bool render{false};
       if (hasToRender_)
       {
         render = true;
@@ -671,7 +700,36 @@ void App::Run()
 
       {
         if (!sensorIntersections_.empty())
+        {
           DrawSensorIntersections(sensorIntersections_, parameters_, render);
+          static size_t itemCurrentIdx{0};
+          auto comboPrevVal{itemCurrentIdx};
+          ImGui::Begin("Ghosts");
+          {
+            // if (ImGui::BeginCombo("Ghost", std::to_string(comboPrevVal).c_str()))
+            // {
+            //   for (size_t i = 0; i < parameters_.camera.GetGhosts().size(); i++)
+            //   {
+            //     const bool isSelected{comboPrevVal == i};
+            //     if (ImGui::Selectable(std::to_string(i).c_str(), isSelected))
+            //     {
+            //       itemCurrentIdx = i;
+            //     }
+            //   }
+            //   ImGui::EndCombo();
+            // }
+
+            // ImVec2 imagePosition = {(ImGui::GetWindowSize().x - (float)parameters_.samplesInX) * 0.5f,
+            //                         (ImGui::GetWindowSize().y - (float)parameters_.samplesInY) * 0.5f};
+            // ImGui::SetCursorPos(imagePosition);
+            // for (size_t i = 0; i < parameters_.camera.GetGhosts().size() + 1; i++)
+            // {
+            //   ImGui::Image((void*)(intptr_t)texturesId_[i],
+            //                ImVec2{(float)parameters_.samplesInX, (float)parameters_.samplesInY});
+            // }
+            ImGui::End();
+          }
+        }
       }
     }
 
@@ -706,32 +764,49 @@ void App::RenderRays()
 {
   sensorIntersections_.clear();
   intersectionsWithAperture_.clear();
-  RayTrace(parameters_, sensorIntersections_, intersectionsWithAperture_);
+  for (const auto texture: texturesId_)
+  {
+    glDeleteTextures(1, &texture);
+  }
+  texturesId_.clear();
+  RayTrace(parameters_, sensorIntersections_, intersectionsWithAperture_, texturesId_);
 }
 
 void App::CalculateLensIntersections(const size_t ghostIndex)
 {
-  const auto maxSamplesY{min((float)parameters_.samplesInY, 10.f)};
+  const auto maxSamplesY{min((float)parameters_.samplesInY, 50.f)};
+  // const auto maxSamplesY{(float)parameters_.samplesInY};
   const auto& camera = parameters_.camera;
-  const Vec3 vertical{0.f, -(float)(parameters_.height)};
-  const Vec3 gridTop = camera.InterfaceAt(0).position
-                       + Vec3{parameters_.light.position.x(), parameters_.light.position.y()} - 0.5f * vertical
-                       - Vec3{1.f, 0.f, 0.f};
-  const float delta_v = parameters_.height / maxSamplesY;
+  // const Vec3 vertical{0.f, -(float)(parameters_.height)};
+  // const Vec3 gridTop = camera.InterfaceAt(0).position
+  //                      + Vec3{parameters_.light.position.x(), parameters_.light.position.y()} - 0.5f * vertical
+  //                      - Vec3{1.f, 0.f, 0.f};
+
+  const Vec3 lightPosition = camera.InterfaceAt(0).position + parameters_.light.position;
+  const auto& ghosts = camera.GetGhosts();
+  const auto& ghost = ghosts.at(ghostIndex);
+  uint32_t counterInterfaces{CountNumberOfInterfacesInvolved(camera, ghost)};
+  const float d = (parameters_.useGhostBounds) ? ghost.bounds[0].y : camera.InterfaceAt(1).apertureDiameter;
+  const float distance = d / (float)parameters_.division;
+  const float delta_v = distance / maxSamplesY;
   Ray rayIn;
   for (int y = 0; y < maxSamplesY; y++)
   {
     rayIn.intensity = 1.f;
     std::vector<Vec3> intersectionPerSample;
 
-    rayIn.origin = gridTop + y* Vec3{0.f, -delta_v};
+    // rayIn.origin = gridTop + y* Vec3{0.f, -delta_v};
+    rayIn.origin = lightPosition;
     // float yValue = -0.5f + GetRandom();
     // rayIn.direction = Vec3{0.f, yValue * delta_v, -1.f};
-    rayIn.direction = parameters_.light.direction;
 
-    const auto& ghosts = camera.GhostEnumeration();
-    const auto& ghost = ghosts.at(ghostIndex);
-    uint32_t counterInterfaces{CountNumberOfInterfacesInvolved(camera, ghost)};
+    float yCoordinate = distance / 2.f - y * delta_v;
+    // rayIn.direction = Vec3{parameters_.light.direction + Vec3{0.f, camera.InterfaceAt(0).apertureDiameter / 2.f}
+    //                   + y* Vec3{0.f, -delta_v};
+    Vec3 direction =
+      Vec3{camera.InterfaceAt(0).position.x(), yCoordinate, camera.InterfaceAt(0).position.z()} - lightPosition;
+    rayIn.direction = direction;
+    rayIn.direction.make_unit_vector();
     Intersection intersection;
     int indexInterface{0};
     int i = 0;
@@ -792,6 +867,7 @@ void App::CalculateLensIntersections(const size_t ghostIndex)
       }
       else if (!intersection.hit)
       {
+        intersectionPerSample.push_back(intersection.position);
         break;
       }
 
@@ -815,6 +891,10 @@ void App::CalculateLensIntersections(const size_t ghostIndex)
           return {0.f, 0.f, 0.f};
         return eta * incident - (eta * dot(normal, incident) + sqrtf(k)) * normal;
       };
+
+      rayIn.direction = unit_vector(intersection.position - rayIn.origin);
+      if (intersection.inverted)
+        rayIn.direction *= -1.f;
 
       if (isSelected)
       {
@@ -846,5 +926,157 @@ void App::CalculateLensIntersections(const size_t ghostIndex)
       }
     }
     intersections_.push_back(intersectionPerSample);
+  }
+}
+
+void App::CalculateGhostLimits()
+{
+  auto& ghosts = parameters_.camera.GhostEnumeration();
+  const auto maxSamplesY((float)parameters_.samplesInY);
+  const auto maxSamplesX((float)parameters_.samplesInX);
+  const auto& camera = parameters_.camera;
+  const float startDistance = camera.InterfaceAt(1).apertureDiameter;
+  const Vec3 lightPosition = camera.InterfaceAt(0).position + parameters_.light.position;
+  const float delta_v = startDistance / maxSamplesY;
+  const float delta_u = startDistance / maxSamplesX;
+  int lambdaFor = (parameters_.spectral) ? 3 : 1;
+  for (auto& ghost: ghosts)
+  {
+    for (int l = 0; l < lambdaFor; l++)
+    {
+      bool goOn = true;
+      Ray rayIn;
+      int x = 0;
+      int y = 0;
+      for (; x < maxSamplesX && y < maxSamplesY && goOn == true; x++, y++)
+      {
+        rayIn.origin = lightPosition;
+        float yCoordinate = (startDistance / 2.f) - y * delta_v;
+        float xCoordinate = -(startDistance / 2.f) + x * delta_u;
+        Vec3 direction = Vec3{xCoordinate, yCoordinate, camera.InterfaceAt(0).position.z()} - lightPosition;
+        rayIn.direction = direction;
+        rayIn.direction.make_unit_vector();
+
+        uint32_t counterInterfaces{CountNumberOfInterfacesInvolved(camera, ghost)};
+        Intersection intersection;
+        int indexInterface{0};
+        int i = 0;
+        Phase phase{Phase::Zero};
+        for (; i < counterInterfaces && indexInterface < camera.GetNumberOfInterfaces(); i++)
+        {
+          const LensInterface& interface = camera.interfaces.at(indexInterface);
+          const int iI{indexInterface};
+          bool isSelected{false};
+          switch (phase)
+          {
+            case Phase::Zero:
+              isSelected = (indexInterface == ghost.lensIndexOne);
+              if (isSelected)
+              {
+                phase = Phase::One;
+                indexInterface--;
+              }
+              else
+              {
+                indexInterface++;
+              }
+              break;
+            case Phase::One:
+              isSelected = (indexInterface == ghost.lensIndexTwo);
+              if (isSelected)
+              {
+                phase = Phase::Two;
+                indexInterface++;
+              }
+              else
+              {
+                indexInterface--;
+              }
+              break;
+            case Phase::Two:
+              indexInterface++;
+              break;
+          }
+
+          intersection = interface.GetIntersection(rayIn);
+          if (intersection.hit)
+          {
+            if (interface.type == LensInterface::Type::Aperture)
+            {
+              float2 uv = make_float2(intersection.position.x(), intersection.position.y());
+              float radius = interface.apertureDiameter / 2.f;
+              if (!camera.IntersectionWithAperture(uv, radius))
+              {
+                intersection.hit = false;
+                break;
+              }
+
+              rayIn.origin = intersection.position;
+              continue;
+            }
+          }
+          else if (!intersection.hit)
+          {
+            break;
+          }
+
+          const int prevInterfaceIndex = (rayIn.direction.z() < 0.f) ? iI - 1 : iI + 1;
+          float n0 = 1.f;
+          if (prevInterfaceIndex >= 0 && prevInterfaceIndex < camera.GetNumberOfInterfaces())
+          {
+            const auto prevInterface = camera.InterfaceAt(prevInterfaceIndex);
+            n0 =
+              (parameters_.spectral) ? prevInterface.ComputeIOR(parameters_.light.lambda[l]) : prevInterface.ior;
+          }
+
+          float n2 = 1.f;
+          n2 = (parameters_.spectral) ? interface.ComputeIOR(parameters_.light.lambda[l]) : interface.ior;
+
+          auto Reflect = [](const Vec3& incident, const Vec3& normal) -> Vec3
+          { return incident - 2 * dot(incident, normal) * normal; };
+          auto Refract = [](const Vec3& incident, const Vec3& normal, const float eta) -> Vec3
+          {
+            float k = 1.0f - eta * eta * (1.0f - dot(normal, incident) * dot(normal, incident));
+            if (k < 0.0)
+              return {0.f, 0.f, 0.f};
+            return eta * incident - (eta * dot(normal, incident) + sqrtf(k)) * normal;
+          };
+
+          rayIn.direction = unit_vector(intersection.position - rayIn.origin);
+          if (intersection.inverted)
+            rayIn.direction *= -1.f;
+
+          if (isSelected)
+          {
+            rayIn.direction = Reflect(rayIn.direction, intersection.normal);
+            float n1 = max(sqrt(n0 * n2), interface.coatingIor);
+            float d1 = interface.coatingLambda / 4.0f / n1;
+            float R = fresnelAR(intersection.theta, parameters_.light.lambda[l], d1, n0, n1, n2);
+            rayIn.intensity *= R;
+          }
+          else
+          {
+            rayIn.direction = Refract(rayIn.direction, intersection.normal, n0 / n2);
+            if (rayIn.direction.near_zero())
+            {
+              rayIn.intensity = 0.f;
+              break;
+            }
+          }
+          rayIn.origin = intersection.position;
+        }
+
+        if (intersection.hit && indexInterface == camera.GetNumberOfInterfaces())
+        {
+          float2 uv = make_float2(intersection.position.x(), intersection.position.y());
+          if (std::abs(uv.x) <= (float)(parameters_.camera.filmWidth / 2.f)
+              && std::abs(uv.y) <= (float)(parameters_.camera.filmHeight / 2.f))
+          {
+            ghost.bounds[l] = make_float2(std::abs(xCoordinate), std::abs(yCoordinate));
+            goOn = false;
+          }
+        }
+      }
+    }
   }
 }

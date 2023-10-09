@@ -35,6 +35,7 @@ struct Ghost
 {
   int lensIndexOne;
   int lensIndexTwo;
+  float2 bounds[3];
 };
 
 struct Camera
@@ -56,6 +57,8 @@ struct Camera
   int apertureNumberOfSides{-1};
   int filmWidth{36};
   int filmHeight{24};
+  std::vector<Ghost> ghosts;
+  Ghost* pGhosts = nullptr;
 
   void SetInterfaces(const std::vector<LensInterface>& theInterfaces)
   {
@@ -187,21 +190,35 @@ struct Camera
     return interface.thickness;
   }
 
-  std::vector<Ghost> GhostEnumeration() const
+  std::vector<Ghost> GetGhosts() const
   {
-    std::vector<Ghost> ghostEnumeration;
-    const auto apertureIndex{GetIndexOfAperture()};
-    for (int i = 0; i < interfaces.size() - 1; i++)
+    return ghosts;
+  }
+
+  std::vector<Ghost>& GhostEnumeration()
+  {
+    if (pGhosts == nullptr)
     {
-      for (int j = 0; j < interfaces.size() - 1; j++)
+      const auto apertureIndex{GetIndexOfAperture()};
+      for (int i = 0; i < interfaces.size() - 1; i++)
       {
-        if (i == j || interfaces.at(j).radius == 0.f || j < i || (i < apertureIndex && j > apertureIndex)
-            || (j < apertureIndex && i > apertureIndex))
-          continue;
-        ghostEnumeration.push_back({j, i});
+        for (int j = 0; j < interfaces.size() - 1; j++)
+        {
+          if (i == j || interfaces.at(j).radius == 0.f || j < i || (i < apertureIndex && j > apertureIndex)
+              || (j < apertureIndex && i > apertureIndex))
+            continue;
+          ghosts.push_back({j, i});
+          ghosts.back().bounds[0] =
+            make_float2(interfaces.at(1).apertureDiameter / 2.f, interfaces.at(1).apertureDiameter / 2.f);
+          ghosts.back().bounds[1] =
+            make_float2(interfaces.at(1).apertureDiameter / 2.f, interfaces.at(1).apertureDiameter / 2.f);
+          ghosts.back().bounds[2] =
+            make_float2(interfaces.at(1).apertureDiameter / 2.f, interfaces.at(1).apertureDiameter / 2.f);
+        }
       }
+      pGhosts = ghosts.data();
     }
-    return ghostEnumeration;
+    return ghosts;
   }
 };
 

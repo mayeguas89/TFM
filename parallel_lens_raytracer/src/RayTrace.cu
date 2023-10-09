@@ -9,12 +9,23 @@
 #include "cuda_runtime_api.h"
 #include "curand_kernel.h"
 #include "device_launch_parameters.h"
+// clang-format off
+#include "glad/gl.h"
+#include "cuda_gl_interop.h"
+// clang-format on
 #include "vec3.h"
 
 #include <float.h>
 #include <vector_types.h>
 
 #define checkCudaErrors(val) check((val), #val, __FILE__, __LINE__)
+
+struct Texture
+{
+  GLuint textureId;
+  struct cudaGraphicsResource* cudaResource;
+  cudaSurfaceObject_t viewCudaSurfaceObject;
+};
 
 template<typename T>
 void check(T err, const char* const func, const char* const file, const int line)
@@ -27,18 +38,10 @@ void check(T err, const char* const func, const char* const file, const int line
   }
 }
 
-__device__ static float GetRandom(curandState* localState)
-{
-  return curand_uniform(localState);
-}
-
-__device__ static Vec3 GetRandomInUnitDisk(curandState* localState)
-{
-  float x = GetRandom(localState) * 2.f - 1.f;
-  float y = GetRandom(localState) * 2.f - 1.f;
-  float z = 0.f;
-  return unit_vector(Vec3{x, y, z});
-}
+// __device__ static float Radians(const float degrees)
+// {
+//   return M_PI * degrees / 180.f;
+// }
 
 __device__ static float fresnelAR(float theta0, float lambda, float d, float n0, float n1, float n2)
 {
@@ -65,7 +68,7 @@ __device__ static float fresnelAR(float theta0, float lambda, float d, float n0,
   float out_s2 = rs01 * rs01 + ris * ris + 2.0f * rs01 * ris * cos(relPhase);
   float out_p2 = rp01 * rp01 + rip * rip + 2.0f * rp01 * rip * cos(relPhase);
 
-  return (out_s2 + out_p2) * 0.5;
+  return (out_s2 + out_p2) * 0.5f;
 }
 
 __device__ Vec3 Reflect(const Vec3& incident, const Vec3& normal)
@@ -95,6 +98,34 @@ __host__ __device__ uint32_t CountNumberOfInterfacesInvolved(const Camera& camer
   return counterInterfaces;
 }
 
+__host__ void CreateTexture(const Parameters& parameters,
+                            GLuint* textureId,
+                            struct cudaGraphicsResource** resource,
+                            unsigned int resFlags,
+                            const std::vector<uint8_t>& pixels)
+{
+  glGenTextures(1, textureId);
+  glBindTexture(GL_TEXTURE_2D, *textureId);
+  {
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexImage2D(GL_TEXTURE_2D,
+                 0,
+                 GL_RGBA,
+                 parameters.samplesInX,
+                 parameters.samplesInY,
+                 0,
+                 GL_RGBA,
+                 GL_UNSIGNED_BYTE,
+                 pixels.data());
+  }
+  // glBindTexture(GL_TEXTURE_2D, 0);
+
+  checkCudaErrors(cudaGraphicsGLRegisterImage(resource, *textureId, GL_TEXTURE_2D, resFlags));
+}
+
 __global__ void setupKernel(curandState* state, int w, int h, int numGhosts)
 {
   int x = blockDim.x * blockIdx.x + threadIdx.x;
@@ -105,6 +136,98 @@ __global__ void setupKernel(curandState* state, int w, int h, int numGhosts)
   auto index = (ghostIndex * w * h) + (y * w + x);
   // Each thread gets same seed, different suquence, no offset
   curand_init(1111, index, 0, &state[index]);
+}
+
+__global__ void
+  FindMax(const Parameters& parameters, const int numberOfGhosts, float3* sensorIntersections, float2* maxValue)
+{
+  int x = blockDim.x * blockIdx.x + threadIdx.x;
+  int y = blockDim.y * blockIdx.y + threadIdx.y;
+  int ghostIndex = blockDim.z * blockIdx.z + threadIdx.z;
+  const auto w = parameters.samplesInX;
+  const auto h = parameters.samplesInY;
+  if (x >= w || y >= h || ghostIndex >= numberOfGhosts)
+    return;
+  int lambdaFor = (parameters.spectral) ? 3 : 1;
+  for (int l = 0; l < lambdaFor; l++)
+  {
+    auto index = (3 * ghostIndex + l) * (w * h) + (y * w + x);
+    const float3 sensorVal = sensorIntersections[index];
+    if (auto v = make_float2(sensorVal.x, sensorVal.y);
+        v.x > maxValue[ghostIndex].x && v.y > maxValue[ghostIndex].y)
+    {
+      maxValue[ghostIndex] = v;
+    }
+  }
+}
+__global__ void
+  FindMin(const Parameters& parameters, const int numberOfGhosts, float3* sensorIntersections, float2* minValue)
+{
+  int x = blockDim.x * blockIdx.x + threadIdx.x;
+  int y = blockDim.y * blockIdx.y + threadIdx.y;
+  int ghostIndex = blockDim.z * blockIdx.z + threadIdx.z;
+  const auto w = parameters.samplesInX;
+  const auto h = parameters.samplesInY;
+  if (x >= w || y >= h || ghostIndex >= numberOfGhosts)
+    return;
+  int lambdaFor = (parameters.spectral) ? 3 : 1;
+  for (int l = 0; l < lambdaFor; l++)
+  {
+    auto index = (3 * ghostIndex + l) * (w * h) + (y * w + x);
+    const float3 sensorVal = sensorIntersections[index];
+    if (auto v = make_float2(sensorVal.x, sensorVal.y);
+        v.x > minValue[ghostIndex].x && v.y > minValue[ghostIndex].y)
+    {
+      minValue[ghostIndex] = v;
+    }
+  }
+}
+
+__global__ void CalculateTextures(const Parameters& parameters,
+                                  const Ghost* ghosts,
+                                  const int ghostIndex,
+                                  float3* sensorIntersections,
+                                  cudaSurfaceObject_t viewCudaSurfaceObject)
+{
+  int x = blockDim.x * blockIdx.x + threadIdx.x;
+  int y = blockDim.y * blockIdx.y + threadIdx.y;
+  const auto w = parameters.samplesInX;
+  const auto h = parameters.samplesInY;
+  if (x >= w || y >= h)
+    return;
+
+  const Camera& camera = parameters.camera;
+  const int lambdaFor = (parameters.spectral) ? 3 : 1;
+  float delta_u = camera.filmWidth / (float)w;
+  float delta_v = camera.filmHeight / (float)h;
+  Vec3 txtColor;
+  // float scale = (1 / (float)lambdaFor);
+  uchar4 prevColor;
+  int gridX{0}, gridY{0};
+  for (int l = 0; l < lambdaFor; l++)
+  {
+    auto index = (3 * ghostIndex + l) * (w * h) + (y * w + x);
+    gridX = (int)floor((sensorIntersections[index].x + camera.filmWidth / 2.f) / delta_u);
+    gridY = (int)floor((sensorIntersections[index].y + camera.filmHeight / 2.f) / delta_v);
+    surf2Dread(&prevColor, viewCudaSurfaceObject, gridX * sizeof(uchar4), gridY);
+    Vec3 lastColor{prevColor};
+    Vec3 lightColor = (parameters.spectral) ? lambda2RGB(parameters.light.lambda[l], 1.f) : parameters.light.color;
+    Vec3 color = {sensorIntersections[index].z * lightColor.x(),
+                  sensorIntersections[index].z * lightColor.y(),
+                  sensorIntersections[index].z * lightColor.z()};
+    if (lastColor.near_zero())
+    {
+      txtColor = color;
+    }
+    else
+    {
+      txtColor = lastColor + color;
+      txtColor *= 0.5f;
+    }
+  }
+  uchar3 color = txtColor.touchar3();
+  uchar4 c4 = make_uchar4(color.x, color.y, color.z, 255);
+  surf2Dwrite(c4, viewCudaSurfaceObject, gridX * sizeof(uchar4), gridY);
 }
 
 /**
@@ -124,6 +247,7 @@ __global__ void ParallelRayTrace(const Parameters parameters,
                                  const Ghost* ghosts,
                                  const int numberOfGhosts,
                                  curandState* rndStates,
+                                 float3* pupilIntersections,
                                  float3* sensorIntersections,
                                  float2* apertureIntersection)
 {
@@ -136,27 +260,33 @@ __global__ void ParallelRayTrace(const Parameters parameters,
     return;
 
   const Camera& camera = parameters.camera;
+  float distanceX = camera.InterfaceAt(1).apertureDiameter / (float)parameters.division;
+  float distanceY = camera.InterfaceAt(1).apertureDiameter / (float)parameters.division;
   Ghost ghost{-1, -1};
-  if (ghostIndex != numberOfGhosts - 1)
-  {
-    ghost = ghosts[ghostIndex];
-  }
 
   int indexInterface{0};
   Phase phase{Phase::Zero};
 
   const Vec3 horizontal{(float)(parameters.width)};
   const Vec3 vertical{0.f, -(float)(parameters.height)};
-  const float delta_u = parameters.width / (float)w;
-  const float delta_v = parameters.height / (float)h;
-  const Vec3 gridUpperLeft =
-    camera.InterfaceAt(0).position + parameters.light.position - 0.5f * (horizontal + vertical);
+  const float delta_u = distanceX / (float)w;
+  const float delta_v = distanceY / (float)h;
+  const Vec3 lightPosition = camera.InterfaceAt(0).position + parameters.light.position;
+  // const Vec3 gridUpperLeft =
+  //   camera.InterfaceAt(0).position + parameters.light.position - 0.5f * (horizontal + vertical);
 
   curandState rndState = rndStates[(ghostIndex * w * h) + (y * w + x)];
 
   int lambdaFor = (parameters.spectral) ? 3 : 1;
   for (int l = 0; l < lambdaFor; l++)
   {
+    float3 pupilPosition = make_float3(0.f, 0.f, 0.f);
+    if (ghostIndex != numberOfGhosts - 1)
+    {
+      ghost = ghosts[ghostIndex];
+      distanceX = ghost.bounds[l].x * 2.f / (float)parameters.division;
+      distanceY = ghost.bounds[l].y * 2.f / (float)parameters.division;
+    }
     auto index = (3 * ghostIndex + l) * (w * h) + (y * w + x);
 
     float delta_x = -0.5f + curand_uniform(&rndState);
@@ -164,8 +294,15 @@ __global__ void ParallelRayTrace(const Parameters parameters,
 
     // Build the ray in from the parameters
     Ray rayIn;
-    rayIn.origin = gridUpperLeft + (x + delta_x) * Vec3{delta_u} + (y + delta_y) * Vec3{0.f, -delta_v};
-    rayIn.direction = parameters.light.direction;
+    // rayIn.origin = gridUpperLeft + (x + delta_x) * Vec3{delta_u} + (y + delta_y) * Vec3{0.f, -delta_v};
+    rayIn.origin = lightPosition;
+    float xCoordinate = -(distanceX / 2.f) + x * delta_u;
+    float yCoordinate = (distanceY / 2.f) - y * delta_v;
+    Vec3 direction = Vec3{xCoordinate, yCoordinate, camera.InterfaceAt(0).position.z()} - lightPosition;
+    rayIn.direction = direction;
+    rayIn.direction.make_unit_vector();
+
+    // rayIn.direction = parameters.light.direction;
     // rayIn.direction = {delta_x * delta_u, delta_y * delta_v, rayIn.direction.z()};
     // rayIn.direction.make_unit_vector();
     rayIn.intensity = parameters.light.intensity;
@@ -233,6 +370,11 @@ __global__ void ParallelRayTrace(const Parameters parameters,
         break;
       }
 
+      if (i == 0)
+      {
+        pupilPosition = make_float3(intersection.position.x(), intersection.position.y(), 0.f);
+      }
+
       // tmpInterface is next one
       // interface is the current
       // Ray in z < 0 travels to sensor: prevInterface is iI-1
@@ -247,6 +389,10 @@ __global__ void ParallelRayTrace(const Parameters parameters,
 
       float n2 = 1.f;
       n2 = (parameters.spectral) ? interface.ComputeIOR(parameters.light.lambda[l]) : interface.ior;
+
+      rayIn.direction = unit_vector(intersection.position - rayIn.origin);
+      if (intersection.inverted)
+        rayIn.direction *= -1.f;
 
       if (isSelected)
       {
@@ -273,9 +419,10 @@ __global__ void ParallelRayTrace(const Parameters parameters,
       float2 uv = make_float2(intersection.position.x(), intersection.position.y());
       if (std::abs(uv.x) <= (float)(camera.filmWidth / 2.f) && std::abs(uv.y) <= (float)(camera.filmHeight / 2.f))
       {
-        rayIn.intensity = clamp(rayIn.intensity);
+        // rayIn.intensity = clamp(rayIn.intensity);
         sensorIntersections[index] =
           make_float3(intersection.position.x(), intersection.position.y(), rayIn.intensity);
+        pupilIntersections[index] = pupilPosition;
       }
     }
   }
@@ -283,9 +430,10 @@ __global__ void ParallelRayTrace(const Parameters parameters,
 
 void RayTrace(const Parameters& parameters,
               std::vector<float3>& sensorIntersections,
-              std::vector<float2> intersectionsWithAperture)
+              std::vector<float2> intersectionsWithAperture,
+              std::vector<unsigned int>& texturesId)
 {
-  auto ghosts = parameters.camera.GhostEnumeration();
+  const auto& ghosts = parameters.camera.GetGhosts();
   uint32_t numGhosts = static_cast<uint32_t>(ghosts.size()) + 1; // Last one reserved for render the light
   uint32_t numInterfaces = static_cast<uint32_t>(parameters.camera.interfaces.size());
 
@@ -314,17 +462,22 @@ void RayTrace(const Parameters& parameters,
   checkCudaErrors(cudaMemcpy(d_ghosts, ghosts.data(), numGhosts * sizeof(Ghost), cudaMemcpyHostToDevice));
   float3* h_tmp = (float3*)malloc(numRays * numGhosts * sizeof(float3));
   float2* h_tmp_1 = (float2*)malloc(numRays * numGhosts * sizeof(float2));
+  float3* h_tmp_2 = (float3*)malloc(numRays * numGhosts * sizeof(float3));
   for (int i = 0; i < numRays * numGhosts; i++)
   {
     h_tmp[i] = make_float3(0.f, 0.f, 0.f);
     h_tmp_1[i] = make_float2(0.f, 0.f);
+    h_tmp_2[i] = make_float3(0.f, 0.f, 0.f);
   }
+  float3* d_pupilIntersections;
   float3* d_sensorIntersections;
   float2* d_apertureIntersections;
   cudaMalloc((void**)&d_sensorIntersections, numRays * numGhosts * sizeof(float3));
   cudaMalloc((void**)&d_apertureIntersections, numRays * numGhosts * sizeof(float2));
+  cudaMalloc((void**)&d_pupilIntersections, numRays * numGhosts * sizeof(float3));
   cudaMemcpy(d_sensorIntersections, h_tmp, numRays * numGhosts * sizeof(float3), cudaMemcpyHostToDevice);
   cudaMemcpy(d_apertureIntersections, h_tmp_1, numRays * numGhosts * sizeof(float2), cudaMemcpyHostToDevice);
+  cudaMemcpy(d_pupilIntersections, h_tmp_2, numRays * numGhosts * sizeof(float3), cudaMemcpyHostToDevice);
 
   // Randon numbers
   curandState* d_states;
@@ -337,10 +490,96 @@ void RayTrace(const Parameters& parameters,
                                             d_ghosts,
                                             numGhosts,
                                             d_states,
+                                            d_pupilIntersections,
                                             d_sensorIntersections,
                                             d_apertureIntersections);
   checkCudaErrors(cudaGetLastError());
   checkCudaErrors(cudaDeviceSynchronize());
+
+  float2* pupilMax = (float2*)malloc(numGhosts * sizeof(float2));
+  float2* sensorMax = (float2*)malloc(numGhosts * sizeof(float2));
+  float2* pupilMin = (float2*)malloc(numGhosts * sizeof(float2));
+  float2* sensorMin = (float2*)malloc(numGhosts * sizeof(float2));
+  for (int i = 0; i < numGhosts; i++)
+  {
+    pupilMax[i] = make_float2(FLT_MIN, FLT_MIN);
+    sensorMax[i] = make_float2(FLT_MIN, FLT_MIN);
+    pupilMin[i] = make_float2(FLT_MAX, FLT_MAX);
+    sensorMin[i] = make_float2(FLT_MAX, FLT_MAX);
+  }
+  float2* d_pupilMax;
+  float2* d_sensorMax;
+  cudaMalloc((void**)&d_pupilMax, numGhosts * sizeof(float2));
+  cudaMalloc((void**)&d_sensorMax, numGhosts * sizeof(float2));
+  cudaMemcpy(d_pupilMax, pupilMax, numGhosts * sizeof(float2), cudaMemcpyHostToDevice);
+  cudaMemcpy(d_sensorMax, sensorMax, numGhosts * sizeof(float2), cudaMemcpyHostToDevice);
+
+  float2* d_pupilMin;
+  float2* d_sensorMin;
+  cudaMalloc((void**)&d_pupilMin, numGhosts * sizeof(float2));
+  cudaMalloc((void**)&d_sensorMin, numGhosts * sizeof(float2));
+  cudaMemcpy(d_pupilMin, pupilMin, numGhosts * sizeof(float2), cudaMemcpyHostToDevice);
+  cudaMemcpy(d_sensorMin, sensorMin, numGhosts * sizeof(float2), cudaMemcpyHostToDevice);
+
+  FindMax<<<gridSize, blockSize>>>(params, numGhosts, d_sensorIntersections, d_sensorMax);
+  checkCudaErrors(cudaGetLastError());
+  checkCudaErrors(cudaDeviceSynchronize());
+  FindMax<<<gridSize, blockSize>>>(params, numGhosts, d_pupilIntersections, d_pupilMax);
+  checkCudaErrors(cudaGetLastError());
+  checkCudaErrors(cudaDeviceSynchronize());
+  FindMin<<<gridSize, blockSize>>>(params, numGhosts, d_sensorIntersections, d_sensorMin);
+  checkCudaErrors(cudaGetLastError());
+  checkCudaErrors(cudaDeviceSynchronize());
+  FindMin<<<gridSize, blockSize>>>(params, numGhosts, d_pupilIntersections, d_pupilMin);
+  checkCudaErrors(cudaGetLastError());
+  checkCudaErrors(cudaDeviceSynchronize());
+  cudaMemcpy(sensorMin, d_sensorMin, numGhosts * sizeof(float2), cudaMemcpyDeviceToHost);
+  cudaMemcpy(pupilMin, d_pupilMin, numGhosts * sizeof(float2), cudaMemcpyDeviceToHost);
+  cudaMemcpy(pupilMax, d_pupilMax, numGhosts * sizeof(float2), cudaMemcpyDeviceToHost);
+  cudaMemcpy(sensorMax, d_sensorMax, numGhosts * sizeof(float2), cudaMemcpyDeviceToHost);
+
+  ////////////////////////////////////////////////////////////////////////////////
+  // cuda open gl interop
+  ////////////////////////////////////////////////////////////////////////////////
+
+  // std::vector<uint8_t> pixels;
+  // pixels.insert(pixels.begin(), parameters.samplesInX * parameters.samplesInY * 4, 0U);
+  // for (int i = 0; i < numGhosts; i++)
+  // {
+  //   texturesId.push_back(0);
+  //   auto& textureId = texturesId.back();
+  //   struct cudaGraphicsResource* cudaResource;
+  //   CreateTexture(parameters, &textureId, &cudaResource, cudaGraphicsMapFlagsWriteDiscard, pixels);
+  //   checkCudaErrors(cudaGraphicsMapResources(1, &cudaResource, 0));
+  //   {
+  //     cudaArray_t viewCudaArray;
+  //     cudaGraphicsSubResourceGetMappedArray(&viewCudaArray, cudaResource, 0, 0);
+  //     cudaResourceDesc viewCudaArrayResourceDesc;
+  //     {
+  //       viewCudaArrayResourceDesc.resType = cudaResourceTypeArray;
+  //       viewCudaArrayResourceDesc.res.array.array = viewCudaArray;
+  //     }
+
+  //     cudaSurfaceObject_t viewCudaSurfaceObject;
+  //     cudaCreateSurfaceObject(&viewCudaSurfaceObject, &viewCudaArrayResourceDesc);
+  //     {
+  //       // 2 dimensions (x,y)
+  //       threads_per_block = powf(prop.maxThreadsPerBlock, 1 / 2.f);
+  //       blockSize = dim3(threads_per_block - 1, threads_per_block - 1);
+  //       gridSize =
+  //         dim3(ceil(parameters.samplesInX / (float)blockSize.x), ceil(parameters.samplesInY / (float)blockSize.y));
+  //       CalculateTextures<<<gridSize, blockSize>>>(params,
+  //                                                  d_ghosts,
+  //                                                  i,
+  //                                                  d_sensorIntersections,
+  //                                                  viewCudaSurfaceObject);
+  //       checkCudaErrors(cudaGetLastError());
+  //       checkCudaErrors(cudaDeviceSynchronize());
+  //     }
+  //     cudaDestroySurfaceObject(viewCudaSurfaceObject);
+  //   }
+  //   cudaGraphicsUnmapResources(1, &cudaResource);
+  // }
 
   cudaMemcpy(h_tmp, d_sensorIntersections, numRays * numGhosts * sizeof(float3), cudaMemcpyDeviceToHost);
   sensorIntersections.assign(h_tmp, h_tmp + (numRays * numGhosts));

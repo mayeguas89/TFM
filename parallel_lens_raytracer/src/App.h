@@ -19,6 +19,7 @@ public:
 private:
   void RenderRays();
   void CalculateLensIntersections(const size_t ghost);
+  void CalculateGhostLimits();
 
   Parameters parameters_;
   std::string programName_;
@@ -29,4 +30,5 @@ private:
   std::vector<float3> sensorIntersections_;
   std::vector<float2> intersectionsWithAperture_;
   std::vector<std::vector<Vec3>> intersections_;
+  std::vector<unsigned int> texturesId_;
 };

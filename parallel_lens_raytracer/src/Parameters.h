@@ -18,6 +18,8 @@ struct Parameters
   int samplesInY{0};
   bool spectral{false};
   int ghost{0};
+  int division{2};
+  bool useGhostBounds{false};
 
   Parameters& operator=(const Parameters& other)
   {
@@ -29,12 +31,32 @@ struct Parameters
     this->samplesInY = other.samplesInY;
     this->spectral = other.spectral;
     this->ghost = other.ghost;
+    this->division = other.division;
+    this->useGhostBounds = other.useGhostBounds;
     return *this;
   }
 };
 
 inline bool operator==(const Parameters& rhs, const Parameters& lhs)
 {
-  return std::tie(rhs.camera, rhs.light, rhs.samplesInX, rhs.samplesInY, rhs.height, rhs.width, rhs.spectral)
-         == std::tie(lhs.camera, lhs.light, lhs.samplesInX, lhs.samplesInY, lhs.height, lhs.width, lhs.spectral);
+  return std::tie(rhs.camera,
+                  rhs.light,
+                  rhs.samplesInX,
+                  rhs.samplesInY,
+                  rhs.height,
+                  rhs.width,
+                  rhs.spectral,
+                  rhs.division,
+                  rhs.useGhostBounds,
+                  rhs.ghost)
+         == std::tie(lhs.camera,
+                     lhs.light,
+                     lhs.samplesInX,
+                     lhs.samplesInY,
+                     lhs.height,
+                     lhs.width,
+                     lhs.spectral,
+                     lhs.division,
+                     lhs.useGhostBounds,
+                     lhs.ghost);
 }

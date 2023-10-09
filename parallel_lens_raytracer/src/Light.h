@@ -28,6 +28,12 @@ struct Light
 };
 inline bool operator==(const Light& one, const Light& other)
 {
-  return std::tie(one.position, one.color, one.direction, one.width, one.height)
-         == std::tie(other.position, other.color, other.direction, other.width, other.height);
+  return std::tie(one.position, one.color, one.direction, one.width, one.height, one.lambda, one.intensity)
+         == std::tie(other.position,
+                     other.color,
+                     other.direction,
+                     other.width,
+                     other.height,
+                     other.lambda,
+                     other.intensity);
 }

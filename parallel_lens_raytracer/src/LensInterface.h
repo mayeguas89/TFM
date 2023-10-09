@@ -62,8 +62,9 @@ struct LensInterface
     {
       float t = (positionCenter.z() - ray.origin.z()) / ray.direction.z();
       intersection.position = ray.At(t);
-      intersection.normal = (ray.direction.z() < 0.f) ? Vec3{0.f, 0.f, 1.f} : Vec3{0.f, 0.f, -1.f};
+      intersection.normal = (ray.direction.z() < 0.f) ? Vec3{0.f, 0.f, -1.f} : Vec3{0.f, 0.f, 1.f};
       intersection.theta = 0.f;
+      intersection.inverted = false;
     }
     // Sphere intersection
     else
@@ -92,7 +93,10 @@ struct LensInterface
       float t = (ray.direction.z() < 0 ^ radius < 0) ? min(t0, t1) : max(t0, t1);
       intersection.position = ray.At(t);
       intersection.normal = (intersection.position - positionCenter) / radius;
+      intersection.normal =
+        (dot(ray.direction, intersection.normal) < 0.f) ? -intersection.normal : intersection.normal;
       intersection.theta = acos(dot(-ray.direction, intersection.normal));
+      intersection.inverted = (t < 0.f);
     }
 
     // Check if intersection is outside aperture radius
